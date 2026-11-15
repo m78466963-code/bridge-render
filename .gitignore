@@ -1,0 +1,11 @@
+node_modules/
+out/
+.remotion/
+references/
+checks/
+*.zip
+*.wav
+*.mp4
+*.png
+!public/**/*.png
+fix-cpus.cjs
