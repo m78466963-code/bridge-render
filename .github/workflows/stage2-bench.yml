@@ -1,0 +1,73 @@
+name: stage2-bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First frame"
+        required: false
+        default: "900"
+      frames:
+        description: "How many frames"
+        required: false
+        default: "30"
+      concurrency:
+        description: "Remotion concurrency"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Ensure browser
+        run: npx remotion browser ensure
+
+      - name: Render benchmark clip
+        env:
+          START: ${{ inputs.start }}
+          FRAMES: ${{ inputs.frames }}
+          CONC: ${{ inputs.concurrency }}
+        run: |
+          set -e
+          mkdir -p out
+          END=$((START + FRAMES - 1))
+          echo "range=$START-$END scale=1.3333 concurrency=$CONC"
+          free -m | tee out/mem-before.txt
+          start=$(date +%s)
+          npx remotion render src/index.ts BridgeShort out/bench-2k.mp4 \
+            --frames=$START-$END --scale=1.3333 --codec=h264 --crf=16 \
+            --gl=swangle --concurrency=$CONC --timeout=600000 --log=info
+          end=$(date +%s)
+          echo "total_seconds=$((end-start))" | tee out/timings.txt
+          echo "frames=$FRAMES" | tee -a out/timings.txt
+          echo "per_frame_seconds_upper_bound=$(python3 -c "print(round((${end}-${start})/${FRAMES},2))")" | tee -a out/timings.txt
+          free -m | tee out/mem-after.txt
+          ls -la out/bench-2k.mp4 | tee -a out/timings.txt
+
+      - name: Upload benchmark
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage2-bench
+          path: |
+            out/bench-2k.mp4
+            out/timings.txt
+            out/mem-before.txt
+            out/mem-after.txt
+          retention-days: 1
+          if-no-files-found: warn
