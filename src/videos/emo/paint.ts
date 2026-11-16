@@ -49,18 +49,27 @@ export const dirtTex = () => ctex("dirt", 512, 512, (g) => {
   }
 });
 
-/** one clump of ripe wheat: 6 curved stalks with seed heads, transparent background, ink outline. */
+/** one clump of ripe wheat: thick golden stalks and full seed heads, transparent background, warm ink outline. */
 export const wheatTex = () => ctex("wheat", 128, 256, (g) => {
   g.clearRect(0, 0, 128, 256);
+  // base blades, so the clump reads as a dense tuft instead of loose spikes
+  for (let i = 0; i < 7; i++) {
+    const x = 30 + i * 11, bend = (i % 2 ? 1 : -1) * (10 + i * 1.5);
+    g.beginPath(); g.moveTo(64, 254); g.quadraticCurveTo(x + bend * 0.3, 200, x + bend, 156 - i * 6);
+    g.strokeStyle = "#7a5624"; g.lineWidth = 5.5; g.lineCap = "round"; g.stroke();
+    g.strokeStyle = i % 2 ? "#d9a94a" : "#c8943a"; g.lineWidth = 3.2; g.stroke();
+  }
   const stalks = [
-    [64, 252, 55, 120, 48, 40, -0.10],
-    [66, 252, 66, 110, 62, 26, 0.02],
-    [62, 252, 76, 128, 82, 48, 0.12],
-    [65, 252, 46, 140, 34, 62, -0.16],
-    [67, 252, 86, 148, 96, 70, 0.18],
-    [64, 252, 60, 160, 56, 92, -0.04],
+    [64, 252, 55, 120, 48, 40, -0.10, 1.0],
+    [66, 252, 66, 110, 62, 26, 0.02, 1.12],
+    [62, 252, 76, 128, 82, 48, 0.12, 0.94],
+    [65, 252, 46, 140, 34, 62, -0.16, 1.04],
+    [67, 252, 86, 148, 96, 70, 0.18, 0.98],
+    [64, 252, 60, 160, 56, 92, -0.04, 1.16],
+    [63, 252, 72, 170, 74, 104, 0.07, 0.90],
+    [66, 252, 40, 176, 28, 112, -0.13, 0.88],
   ] as const;
-  for (const [x0, y0, cx, cy, x1, y1, lean] of stalks) {
+  for (const [x0, y0, cx, cy, x1, y1, lean, head] of stalks) {
     const pts: [number, number][] = [];
     for (let i = 0; i <= 18; i++) {
       const t = i / 18, s = 1 - t;
@@ -68,19 +77,26 @@ export const wheatTex = () => ctex("wheat", 128, 256, (g) => {
     }
     g.lineCap = "round";
     g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.strokeStyle = "#3a2a16"; g.lineWidth = 5.5; g.stroke();
-    g.strokeStyle = "#c99a44"; g.lineWidth = 3.2; g.stroke();
-    // seed head: small chevrons either side of the top 26 px
+    g.strokeStyle = "#6b4a1e"; g.lineWidth = 5.4; g.stroke();
+    g.strokeStyle = "#d5a241"; g.lineWidth = 3.5; g.stroke();
+    // seed head: a tapered golden spike with a few chevron scales and awns
     const [hx, hy] = pts[pts.length - 1];
-    g.strokeStyle = "#3a2a16"; g.lineWidth = 3.6;
-    for (let k = 0; k < 5; k++) {
-      const yy = hy + 10 + k * 8;
-      const w = 7 - k * 0.7;
-      g.beginPath(); g.moveTo(hx - w, yy); g.lineTo(hx, yy - 3); g.lineTo(hx + w, yy); g.stroke();
+    g.save(); g.translate(hx, hy + 18); g.rotate(lean * 1.2);
+    const hg = g.createLinearGradient(0, -22 * head, 0, 24 * head);
+    hg.addColorStop(0, "#f6d77f"); hg.addColorStop(0.55, "#e8b84b"); hg.addColorStop(1, "#bd8630");
+    g.fillStyle = hg;
+    g.beginPath(); g.ellipse(0, 0, 6.2 * head, 22 * head, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "#785021"; g.lineWidth = 1.5; g.stroke();
+    g.strokeStyle = "#a9792f"; g.lineWidth = 2.2;
+    for (let k = 0; k < 6; k++) {
+      const yy = -15 * head + k * 6 * head, w = (6.5 - k * 0.7) * head;
+      g.beginPath(); g.moveTo(-w, yy + 2); g.lineTo(0, yy - 2); g.lineTo(w, yy + 2); g.stroke();
     }
-    g.fillStyle = "#e8b84b";
-    g.beginPath(); g.ellipse(hx, hy + 20, 4.5, 16, lean * 1.4, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = "#5b431f"; g.lineWidth = 1.2; g.stroke();
+    g.strokeStyle = "#f1cd72"; g.lineWidth = 1.1;
+    for (let k = -2; k <= 2; k++) {
+      g.beginPath(); g.moveTo(k * 2.4, -20 * head); g.lineTo(k * 4.2, -32 * head); g.stroke();
+    }
+    g.restore();
   }
 });
 
@@ -102,6 +118,33 @@ export const ironTex = () => ctex("iron", 256, 256, (g) => {
   for (let y = 10; y < 256; y += 48) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
 });
 
+/** blued gunmetal: brushed bands, panel seams, rivets and warm scratches so the Lewis reads in silhouette. */
+export const gunTex = () => ctex("gunmetal", 256, 256, (g) => {
+  const base = g.createLinearGradient(0, 0, 256, 0);
+  base.addColorStop(0, "#4c545f"); base.addColorStop(0.45, "#68717d"); base.addColorStop(0.62, "#555d68"); base.addColorStop(1, "#3e454f");
+  g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 160; i++) {
+    const y = rnd(i, 61) * 256;
+    g.strokeStyle = `rgba(${rnd(i, 62) > 0.5 ? "190,198,206" : "28,32,38"},${0.06 + 0.12 * rnd(i, 63)})`;
+    g.lineWidth = 0.6 + rnd(i, 64) * 1.2;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(256, y + (rnd(i, 65) - 0.5) * 3); g.stroke();
+  }
+  g.strokeStyle = "rgba(20,24,30,.55)"; g.lineWidth = 3;
+  for (const y of [44, 128, 212]) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
+  g.strokeStyle = "rgba(198,204,210,.28)"; g.lineWidth = 1;
+  for (const y of [47, 131, 215]) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
+  for (let i = 0; i < 9; i++) {
+    const x = 18 + i * 27, y = i % 2 ? 84 : 172, r = 3.2;
+    g.fillStyle = "#9ba4ae"; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#30363e"; g.beginPath(); g.arc(x - 0.8, y - 0.8, r * 0.42, 0, Math.PI * 2); g.fill();
+  }
+  for (let i = 0; i < 26; i++) {
+    const x = rnd(i, 66) * 256, y = rnd(i, 67) * 256, w = 8 + rnd(i, 68) * 34;
+    g.strokeStyle = `rgba(190,144,92,${0.12 + rnd(i, 69) * 0.22})`; g.lineWidth = 0.8;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + w, y + (rnd(i, 70) - 0.5) * 6); g.stroke();
+  }
+});
+
 /** weathered timber for the shed, fence, windmill and crates. */
 export const woodTex = () => ctex("wood2", 512, 256, (g) => {
   g.fillStyle = "#8a6a43"; g.fillRect(0, 0, 512, 256);
@@ -118,68 +161,93 @@ export const woodTex = () => ctex("wood2", 512, 256, (g) => {
   }
 });
 
-/** toy relief map of Australia for S01: sea paper, coast ink, relief washes, a few state lines and a "1932" stamp. */
+/** toy relief map of Australia for S01. Textless by design: sea paper, coast ink, relief and state boundaries. */
 export const mapTex = () => ctex("australia", 1024, 640, (g) => {
-  g.fillStyle = "#d9e6e2"; g.fillRect(0, 0, 1024, 640);
+  g.fillStyle = "#d7e4df"; g.fillRect(0, 0, 1024, 640);
   for (let i = 0; i < 1200; i++) {
-    g.fillStyle = rnd(i, 51) > 0.5 ? "rgba(90,130,140,.08)" : "rgba(255,255,255,.10)";
+    g.fillStyle = rnd(i, 51) > 0.5 ? "rgba(90,130,140,.07)" : "rgba(255,255,255,.10)";
     g.fillRect(rnd(i, 52) * 1024, rnd(i, 53) * 640, 2, 2);
   }
   // graticule
-  g.strokeStyle = "rgba(72,104,112,.20)"; g.lineWidth = 1;
+  g.strokeStyle = "rgba(72,104,112,.18)"; g.lineWidth = 1;
   for (let x = 64; x < 1024; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 640); g.stroke(); }
   for (let y = 52; y < 640; y += 52) { g.beginPath(); g.moveTo(0, y); g.lineTo(1024, y); g.stroke(); }
-  // Australia, roughly geographic, with Tasmania
-  const au: [number, number][] = [
-    [188, 268], [156, 222], [166, 168], [214, 130], [282, 112], [352, 96], [420, 92], [482, 74],
-    [548, 82], [608, 64], [672, 86], [736, 82], [800, 118], [854, 162], [874, 214], [862, 272],
-    [826, 318], [790, 372], [742, 410], [690, 444], [634, 466], [574, 476], [522, 470], [462, 444],
-    [404, 428], [348, 402], [292, 368], [242, 322], [206, 296],
-  ];
+  // lon/lat -> canvas (mainland from Cape York to Wilsons Prom, Tasmania below)
+  const X = (lon: number) => 72 + ((lon - 110) / 45) * 880;
+  const Y = (lat: number) => 58 + ((-8 - lat) / 37) * 520;
+  const at = (pts: [number, number][]): [number, number][] => pts.map(([lo, la]) => [X(lo), Y(la)]);
+  const au = at([
+    [142.5, -10.7], [141.5, -13.0], [141.7, -15.4], [140.8, -17.5], [139.2, -17.7], [136.9, -15.8],
+    [136.5, -14.2], [135.5, -12.2], [132.6, -11.2], [130.8, -12.4], [129.6, -14.8], [128.0, -15.5],
+    [126.0, -14.0], [124.4, -16.0], [122.2, -17.8], [120.0, -19.5], [116.8, -20.6], [114.1, -21.8],
+    [113.4, -24.0], [114.0, -26.0], [113.2, -26.5], [114.5, -28.0], [115.0, -31.5], [115.7, -33.5],
+    [115.1, -34.4], [117.9, -35.0], [120.0, -33.9], [123.0, -33.9], [126.0, -32.3], [129.0, -31.7],
+    [132.0, -32.0], [134.0, -33.0], [135.5, -34.8], [137.0, -35.2], [137.9, -33.9], [138.5, -35.5],
+    [140.0, -37.5], [141.0, -38.1], [144.5, -38.4], [146.4, -39.1], [147.5, -38.0], [150.0, -37.4],
+    [150.8, -35.5], [153.0, -33.0], [153.1, -30.0], [153.4, -27.5], [153.1, -25.0], [151.0, -23.0],
+    [149.0, -20.5], [146.8, -19.3], [145.8, -16.9], [145.3, -15.0], [144.0, -14.5], [143.5, -13.0],
+    [142.8, -11.5],
+  ]);
+  const tas = at([
+    [144.6, -40.7], [145.5, -40.9], [148.3, -40.8], [148.2, -42.2], [147.5, -43.2], [146.8, -43.6],
+    [146.0, -43.5], [145.2, -42.5], [145.0, -41.5],
+  ]);
   const path = (pts: [number, number][]) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); };
+  // paper shadow under the continent
+  g.save(); g.translate(8, 10); path(au); g.fillStyle = "rgba(72,48,28,.16)"; g.fill(); g.restore();
   path(au);
-  g.fillStyle = "#d8b06a"; g.fill();
-  g.save(); g.clip();
-  // interior desert washes
+  const land = g.createLinearGradient(0, Y(-10), 0, Y(-39));
+  land.addColorStop(0, "#e3c17a"); land.addColorStop(0.55, "#d8b06a"); land.addColorStop(1, "#c99a52");
+  g.fillStyle = land; g.fill();
+  g.save(); path(au); g.clip();
+  // interior desert / scrub washes, placed by real-ish coordinates
   const relief: [number, number, number, string][] = [
-    [470, 280, 250, "rgba(196,96,54,.55)"], [610, 250, 190, "rgba(190,108,62,.45)"],
-    [380, 340, 170, "rgba(206,138,78,.42)"], [700, 340, 150, "rgba(150,128,78,.32)"],
-    [300, 180, 170, "rgba(120,140,86,.30)"], [820, 190, 110, "rgba(120,140,86,.30)"],
+    [128, -25, 235, "rgba(196,96,54,.48)"], [140, -24, 190, "rgba(190,108,62,.42)"],
+    [119, -30, 180, "rgba(206,138,78,.38)"], [146, -31, 150, "rgba(150,128,78,.28)"],
+    [116, -18, 170, "rgba(120,140,86,.28)"], [150, -20, 120, "rgba(120,140,86,.26)"],
+    [136, -33, 120, "rgba(156,94,58,.32)"], [146, -36, 90, "rgba(120,138,84,.30)"],
   ];
-  for (const [x, y, r, c] of relief) { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
-  // coast shading
-  g.strokeStyle = "rgba(246,232,198,.75)"; g.lineWidth = 12; g.stroke();
-  g.restore();
-  path(au); g.strokeStyle = "#3b2a22"; g.lineWidth = 5; g.lineJoin = "round"; g.stroke();
-  // state lines
-  g.strokeStyle = "rgba(70,48,36,.45)"; g.lineWidth = 2;
-  for (const [x0, y0, x1, y1] of [[430, 96, 430, 460], [700, 84, 690, 444], [430, 300, 690, 300], [242, 322, 430, 300]] as const) {
-    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+  for (const [lo, la, r, c] of relief) {
+    const x = X(lo), y = Y(la), gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, c); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
   }
-  // Tasmania
-  g.beginPath(); g.ellipse(632, 536, 34, 22, -0.2, 0, Math.PI * 2); g.fillStyle = "#d8b06a"; g.fill();
-  g.strokeStyle = "#3b2a22"; g.lineWidth = 4; g.stroke();
-  // labels (diegetic map printing)
-  g.fillStyle = "#4a3529"; g.textAlign = "center";
-  g.font = "700 30px Georgia, serif"; g.fillText("AUSTRALIA", 512, 576);
-  g.font = "600 18px Georgia, serif"; g.fillText("WESTERN AUSTRALIA", 318, 268);
-  g.fillText("NORTHERN TERRITORY", 545, 218);
-  g.fillText("SOUTH AUSTRALIA", 545, 352);
-  g.fillText("QUEENSLAND", 760, 212);
-  g.fillText("NEW SOUTH WALES", 748, 352);
-  g.fillText("VICTORIA", 700, 418);
-  // sea decorative lines + compass
-  g.strokeStyle = "rgba(72,104,112,.35)"; g.lineWidth = 1.4;
+  // eastern highlands: a few warm ridge strokes
+  g.strokeStyle = "rgba(112,70,42,.28)"; g.lineWidth = 2;
+  for (let i = 0; i < 20; i++) {
+    const x = X(147 + rnd(i, 71) * 3), y = Y(-25 - rnd(i, 72) * 11);
+    g.beginPath(); g.moveTo(x - 15, y + 5); g.lineTo(x, y - 8); g.lineTo(x + 15, y + 5); g.stroke();
+  }
+  // coast shading
+  path(au); g.strokeStyle = "rgba(250,235,198,.78)"; g.lineWidth = 15; g.lineJoin = "round"; g.stroke();
+  path(au); g.strokeStyle = "rgba(58,42,30,.95)"; g.lineWidth = 5.5; g.lineJoin = "round"; g.stroke();
+  // state boundaries (no labels)
+  g.strokeStyle = "rgba(70,48,36,.40)"; g.lineWidth = 2.2;
+  const line = (a: [number, number], b: [number, number]) => { g.beginPath(); g.moveTo(X(a[0]), Y(a[1])); g.lineTo(X(b[0]), Y(b[1])); g.stroke(); };
+  line([129, -12], [129, -35]);
+  line([138, -12], [138, -26]);
+  line([141, -26], [141, -38]);
+  line([141, -29], [153, -29]);
+  line([141, -34], [150, -36]);
+  g.restore();
+  path(au); g.strokeStyle = "#3b2a22"; g.lineWidth = 5.5; g.lineJoin = "round"; g.stroke();
+  path(au); g.strokeStyle = "rgba(255,246,220,.28)"; g.lineWidth = 2; g.stroke();
+  // Tasmania + islands
+  const island = (pts: [number, number][], fill = "#d8b06a") => {
+    g.save(); g.translate(5, 6); path(pts); g.fillStyle = "rgba(72,48,28,.14)"; g.fill(); g.restore();
+    path(pts); g.fillStyle = fill; g.fill(); g.strokeStyle = "#3b2a22"; g.lineWidth = 4; g.lineJoin = "round"; g.stroke();
+  };
+  island(tas);
+  island(at([[136.6, -35.6], [137.4, -35.5], [137.7, -36.1], [136.9, -36.2]]), "#d3a861");
+  island(at([[147.9, -40.0], [148.4, -39.9], [148.5, -40.3], [148.0, -40.4]]), "#d3a861");
+  // sea decoration (no compass lettering)
+  g.strokeStyle = "rgba(72,104,112,.30)"; g.lineWidth = 1.4;
   for (let i = 0; i < 8; i++) {
     g.beginPath(); g.arc(886, 96, 18 + i * 7, 0.2, 1.5); g.stroke();
+    g.beginPath(); g.arc(886, 96, 14 + i * 7, 3.35, 4.65); g.stroke();
   }
-  g.fillStyle = "#4a3529"; g.font = "700 22px Georgia, serif"; g.fillText("N", 886, 44);
-  g.beginPath(); g.moveTo(886, 52); g.lineTo(878, 78); g.lineTo(894, 78); g.closePath(); g.fill();
-  // "1932" rubber stamp, slightly off-axis
-  g.save(); g.translate(852, 540); g.rotate(-0.08);
-  g.strokeStyle = "rgba(122,54,40,.6)"; g.lineWidth = 4; g.strokeRect(-60, -26, 120, 52);
-  g.fillStyle = "rgba(122,54,40,.65)"; g.font = "700 28px Courier New, monospace"; g.fillText("1932", 0, 10);
-  g.restore();
+  g.save(); g.translate(886, 96); g.rotate(0.2); g.fillStyle = "rgba(74,53,41,.55)";
+  g.beginPath(); g.moveTo(0, -34); g.lineTo(5, -7); g.lineTo(0, -12); g.lineTo(-5, -7); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(0, 34); g.lineTo(4, 8); g.lineTo(0, 12); g.lineTo(-4, 8); g.closePath(); g.fill(); g.restore();
   // wood frame
   g.strokeStyle = "#6f4e2f"; g.lineWidth = 18; g.strokeRect(9, 9, 1006, 622);
   g.strokeStyle = "#a97b49"; g.lineWidth = 4; g.strokeRect(20, 20, 984, 600);
@@ -206,16 +274,20 @@ export const dustTex = () => ctex("dust", 192, 128, (g) => {
   }
 });
 
-/** stencilled ammo crate face. */
-export const crateTex = (label: string) => ctex(`crate|${label}`, 512, 256, (g) => {
+/** textless ammo crate face: planks, steel corner straps and a painted chevron stencil. */
+export const crateTex = () => ctex("crate", 512, 256, (g) => {
   g.fillStyle = "#7d613d"; g.fillRect(0, 0, 512, 256);
   for (let y = 0; y < 256; y += 64) {
     g.fillStyle = ["#7d613d", "#876a43", "#745835"][(y / 64) % 3]; g.fillRect(0, y, 512, 64);
     g.strokeStyle = "rgba(52,36,22,.6)"; g.lineWidth = 2; g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke();
   }
   g.strokeStyle = "#4a3420"; g.lineWidth = 14; g.strokeRect(7, 7, 498, 242);
-  g.fillStyle = "#d7cdb2"; g.textAlign = "center";
-  g.font = "700 58px Courier New, monospace"; g.fillText(label, 256, 128);
-  g.font = "700 28px Courier New, monospace"; g.fillText("SMALL ARMS AMMUNITION", 256, 178);
-  g.fillStyle = "rgba(60,42,26,.55)"; g.fillRect(70, 196, 372, 4);
+  g.fillStyle = "rgba(54,58,62,.85)";
+  for (const x of [34, 444]) g.fillRect(x, 24, 34, 208);
+  g.fillStyle = "#9ba4ae";
+  for (const x of [34, 444]) for (let y = 44; y < 224; y += 36) { g.beginPath(); g.arc(x + 17, y, 4, 0, Math.PI * 2); g.fill(); }
+  g.strokeStyle = "rgba(215,205,178,.75)"; g.lineWidth = 9; g.lineJoin = "round";
+  g.beginPath(); g.moveTo(190, 92); g.lineTo(256, 152); g.lineTo(322, 92); g.stroke();
+  g.beginPath(); g.moveTo(190, 142); g.lineTo(256, 202); g.lineTo(322, 142); g.stroke();
+  g.fillStyle = "rgba(60,42,26,.55)"; g.fillRect(70, 222, 372, 3);
 });

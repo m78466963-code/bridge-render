@@ -2,9 +2,9 @@
 // fence, eucalypts, the S01 relief-map overlay, a Lewis gun on a tripod, a gun crew and the hero emu.
 // update(id, f, camera, scene) poses everything for the three built shots (S01–S03) and returns the look target.
 import * as THREE from "three";
-import { dirtTex, wheatTex, ironTex, woodTex, mapTex, cloudTex, crateTex, dustTex } from "./paint";
+import { dirtTex, wheatTex, ironTex, gunTex, woodTex, mapTex, cloudTex, crateTex, dustTex } from "./paint";
 import { twoTone, TONE, CHAR, untone } from "./shade";
-import { LIGHTS } from "./lights";
+import { LIGHTS, LOOK } from "./lights";
 import { NOINK } from "./ink";
 import { Pool, Actor, Place, CamInfo, placeSoldier, placeEmu, blinkAt } from "./cast";
 import { FPS, SHOTS, camAt, V3, smooth } from "./story";
@@ -141,16 +141,20 @@ export class EmuWorld {
     for (let i = 0; i < 9000 && n < N; i++) {
       const x = -42 + 84 * hash(i, 1);
       const z = -42 + 84 * hash(i, 2);
-      if (Math.hypot(x - -5, z - -4) < 6.2) continue;      // shed
-      if (Math.hypot(x - -12, z - -7) < 5.2) continue;     // windmill
+      if (Math.hypot(x - -6.5, z - -8.5) < 6.8) continue;  // shed
+      if (Math.hypot(x - -13, z - -8.5) < 5.2) continue;   // windmill
       if (Math.hypot(x, z - 0.4) < 4.2) continue;          // gun / crew
       if (x > -8.8 && x < 8.8 && z > -8.8 && z < 2.8) continue;    // S01 map plate clearing
-      if (segDist(x, z, -3.4, -3.5, -1.65, -2.35) < 1.9) continue; // S02 lens path
+      // soften the back edge of the farmyard clearing so the wheat line is not a hard band
+      if (x > -8.8 && x < 8.8 && z >= 2.8 && z < 4.6 && hash(i, 9) < ((4.6 - z) / 1.8) * 0.45) continue;
+      const s02 = segDist(x, z, -3.4, -3.5, -1.65, -2.35);
+      if (s02 < 2.6) continue;                                     // S02 lens path
+      if (s02 < 3.5 && hash(i, 10) < 0.5) continue;                // feathered edge
       if (segDist(x, z, 14.5, 10.0, 5.0, 9.4) < 2.7) continue;     // S03 lens path
-      const s = 0.85 + 0.55 * Math.abs(Math.sin(i * 3.17 + 0.4));
+      const s = 0.92 + 0.52 * Math.abs(Math.sin(i * 3.17 + 0.4));
       qt.setFromAxisAngle(V(0, 1, 0), i * 2.399);
-      wheat.setMatrixAt(n, m.compose(pos.set(x, 0, z), qt, scl.set(s, s * (0.9 + 0.2 * Math.abs(Math.sin(i * 1.7))), s)));
-      col.setHSL(0.09 + 0.02 * Math.sin(i * 5.3), 0.52, 0.56 + 0.08 * Math.sin(i * 2.1));
+      wheat.setMatrixAt(n, m.compose(pos.set(x, 0, z), qt, scl.set(s, s * (0.94 + 0.2 * Math.abs(Math.sin(i * 1.7))), s)));
+      col.setHSL(0.108 + 0.024 * hash(i, 5), 0.72 + 0.10 * hash(i, 6), 0.60 + 0.08 * hash(i, 7));
       wheat.setColorAt(n, col);
       n++;
     }
@@ -160,7 +164,7 @@ export class EmuWorld {
 
     // ---- windmill ----
     this.mill = new THREE.Group();
-    this.mill.position.set(-12, 0, -7);
+    this.mill.position.set(-13, 0, -8.5);
     const towerM = lam({ map: woodTex(), color: "#b7a58a" });
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 2.05, 7.6, 4, 1), towerM);
     tower.position.y = 3.8; tower.rotation.y = Math.PI / 4; tower.castShadow = true; tower.receiveShadow = true; this.mill.add(tower);
@@ -199,7 +203,7 @@ export class EmuWorld {
     R.add(this.mill);
 
     // ---- corrugated shed ----
-    const shed = new THREE.Group(); shed.position.set(-5, 0, -4);
+    const shed = new THREE.Group(); shed.position.set(-6.5, 0, -8.5);
     const iron = ironTex(); iron.wrapS = iron.wrapT = THREE.RepeatWrapping; iron.repeat.set(3, 1.4);
     const wallM = lam({ map: iron, color: "#cfcbbd" });
     const body = new THREE.Mesh(new THREE.BoxGeometry(7, 3, 4.5), wallM);
@@ -207,10 +211,24 @@ export class EmuWorld {
     const roofM = lam({ map: iron, color: "#8b877a" });
     for (const s of [-1, 1]) {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.14, 2.9), roofM);
-      slab.position.set(0, 3.62, s * 1.16); slab.rotation.x = s * -0.42; slab.castShadow = true; shed.add(slab);
+      slab.position.set(0, 3.62, s * 1.16); slab.rotation.x = s * 0.42; slab.castShadow = true; shed.add(slab);
     }
-    const ridge = new THREE.Mesh(new THREE.BoxGeometry(7.8, 0.15, 0.15), lam({ color: "#5d594e" }));
-    ridge.position.y = 4.22; shed.add(ridge);
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(7.9, 0.16, 0.16), lam({ color: "#5d594e" }));
+    ridge.position.y = 4.24; shed.add(ridge);
+    // gable ends close the triangle between wall top and ridge
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute("position", new THREE.Float32BufferAttribute([
+      -3.5, 3.0, -2.25, -3.5, 3.0, 2.25, -3.5, 4.22, 0,
+       3.5, 3.0,  2.25,  3.5, 3.0, -2.25,  3.5, 4.22, 0,
+    ], 3));
+    gg.computeVertexNormals();
+    const gableM = lam({ color: "#c8c4b6", side: THREE.DoubleSide });
+    const gable = new THREE.Mesh(gg, gableM); gable.castShadow = true; gable.receiveShadow = true; shed.add(gable);
+    // gutter along the front eave, with a downpipe
+    const gutter = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 7.7, 8), lam({ color: "#69675e" }));
+    gutter.rotation.z = Math.PI / 2; gutter.position.set(0, 3.04, 2.6); shed.add(gutter);
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 2.8, 8), lam({ color: "#75736a" }));
+    pipe.position.set(3.35, 1.55, 2.62); shed.add(pipe);
     const door = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.25), lam({ map: woodTex(), color: "#6d5335" }));
     door.position.set(1.4, 1.13, 2.26); shed.add(door);
     const frameM = lam({ color: "#4d3c2a" });
@@ -253,6 +271,7 @@ export class EmuWorld {
 
     // ---- Lewis gun + ammo crates ----
     const gun = new THREE.Group(); gun.position.set(0, 0, 0);
+    const gunM = lam({ map: gunTex(), color: "#ffffff" });
     const ironM = lam({ color: "#3d414c" });
     const steelM = lam({ color: "#7d8088" });
     for (let i = 0; i < 3; i++) {
@@ -262,9 +281,9 @@ export class EmuWorld {
     }
     const cradle = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.18, 12), ironM);
     cradle.position.y = 0.98; gun.add(cradle);
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.2, 0.62), ironM);
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.2, 0.62), gunM);
     receiver.position.set(0, 1.1, 0.18); receiver.castShadow = true; gun.add(receiver);
-    const jacket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.75, 14), ironM);
+    const jacket = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.75, 14), gunM);
     jacket.rotation.x = Math.PI / 2; jacket.position.set(0, 1.1, -0.36); jacket.castShadow = true; gun.add(jacket);
     for (let k = 0; k < 5; k++) {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.017, 6, 14), steelM);
@@ -272,14 +291,21 @@ export class EmuWorld {
     }
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.62, 12), steelM);
     barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 1.1, -1.0); barrel.castShadow = true; gun.add(barrel);
-    const pan = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.11, 24), ironM);
+    const pan = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.11, 24), gunM);
     pan.position.set(0, 1.31, -0.18); pan.castShadow = true; gun.add(pan);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const bolt = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 4), steelM);
+      bolt.position.set(Math.cos(a) * 0.27, 1.372, -0.18 + Math.sin(a) * 0.27); gun.add(bolt);
+    }
+    const topEdge = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.58), steelM);
+    topEdge.position.set(0, 1.207, 0.18); gun.add(topEdge);
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.54), lam({ map: woodTex(), color: "#8a5f35" }));
     stock.position.set(0, 1.02, 0.62); stock.castShadow = true; gun.add(stock);
     this.props.push(gun);
     R.add(gun);
 
-    const crateM = lam({ map: crateTex("10,000 ROUNDS"), color: "#ffffff" });
+    const crateM = lam({ map: crateTex(), color: "#ffffff" });
     for (const [x, z, ry, n] of [[1.25, 0.55, -0.35, 1], [-1.35, 0.95, 0.22, 2]] as const) {
       for (let k = 0; k < n; k++) {
         const crate = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.5, 0.56), [wood, wood, wood, wood, crateM, crateM]);
@@ -323,7 +349,7 @@ export class EmuWorld {
   private actor(i: number) { while (this.actors.length <= i) this.actors.push(new Actor(this.root)); return this.actors[i]; }
 
   update(id: number, f: number, cam: THREE.PerspectiveCamera, scene: THREE.Scene) {
-    const t = f / FPS, s = SHOTS[id - 1] ?? SHOTS[2], L = LIGHTS[s.light];
+    const t = f / FPS, s = SHOTS[id - 1] ?? SHOTS[2], L = LIGHTS[s.light], look = LOOK[s.light];
     // ---- camera ----
     const c = camAt(id, f);
     cam.position.set(...c.pos); cam.up.set(0, 1, 0); cam.lookAt(...c.look); cam.rotateZ(c.roll);
@@ -344,7 +370,7 @@ export class EmuWorld {
     this.fill.intensity = 0;
     TONE.uLitCol.value.set(...L.lit); TONE.uShadeCol.value.set(...L.shade); TONE.uShadeLift.value.set(...L.lift);
     TONE.uLambert.value = L.lambert; TONE.uSideK.value = L.sideK; TONE.uTerm.value = L.term;
-    TONE.uBounce.value.set(0, 0, 0); TONE.uSat.value = 1.05;
+    TONE.uBounce.value.set(...look.bounce); TONE.uSat.value = look.sat;
     CHAR.uCharTint.value.set(...L.charTint); CHAR.uCharShade.value = L.charShade; CHAR.uGrad.value = L.charGrad;
     CHAR.uBodyGrad.value = L.bodyGrad; CHAR.uSideTint.value.set(...L.sideTint);
 
@@ -393,6 +419,10 @@ export class EmuWorld {
       places.push(placeSoldier(camInfo, { x: 1.35, z: 1.05, dx: -1.3, dz: -1.0, expr: "neutral", mode: "stand", seed: 4, scale: 0.84 }));
       const forced = f >= 126 && f < 130 ? [0.5, 1, 1, 0.5][f - 126] : blinkAt(f, 3);
       places.push(placeEmu(camInfo, { x: 2.4, z: -4.65, scale: 0.98, blink: forced, bob: 2.2 * Math.sin((f - 82) * 0.06), look: 0 }));
+    }
+    if (id === 3) {
+      places.push(placeSoldier(camInfo, { x: 0.5, z: 0.8, dx: -1.0, dz: -0.35, expr: "stern", mode: "stand", seed: 9, scale: 0.92 }));
+      places.push(placeEmu(camInfo, { x: -3.5, z: -1.0, scale: 1.0, blink: blinkAt(f, 7), bob: 0.7 * Math.sin((f - 140) * 0.05), look: 0.3 }));
     }
 
     this.frustum.setFromProjectionMatrix(this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));

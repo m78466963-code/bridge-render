@@ -1,4 +1,4 @@
-// Colour grade for the bridge short (post agent): the fitted reference-style GradeEffect,
+// Colour grade for the bridge short (post agent): references/grade/GradeEffect.ts (reports/grade.md) verbatim,
 // plus GRADES / GRADE_STRENGTH / gradeFor() so the lead can re-fit the presets after the lighting merge.
 // The presets were fitted to the OLD unlit stills: after the WORLD lighting lands they will over-correct; re-fit
 // (grade.md 5.C) or lower GRADE_STRENGTH. Each Inner (crossfade layer) grades with its own shot's light, so the DOM
@@ -157,7 +157,7 @@ export class GradeEffect extends Effect {
 export const GRADE_DAY2: GradeParams = {
   ky: [0, 0.1, 0.28, 0.6, 0.835, 0.945, 1],
   sat: [1.0, 1.05, 1.0],
-  tintS: [0.01, 0.002], tintM: [0, 0], tintH: [0.006, 0],
+  tintS: [0.006, -0.001], tintM: [0, 0], tintH: [0.004, 0],
   vig: [0.12, 0.45],
 };
 export const GRADE_GOLDEN2: GradeParams = {
