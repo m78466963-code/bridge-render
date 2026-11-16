@@ -68,8 +68,8 @@ const S1d = (): ShotCam => ({ pos: [7.2, 2.8, 3.2], look: [-2.2, 1.05, -8.5], fo
 // The yaw is pulled left so the near gunner and the far gunner share the frame; the shed/tank now sits behind the lens.
 const S2a = (): ShotCam => ({ pos: [-3.4, 1.02, -3.5], look: [-0.6, 1.12, -0.2], fov: 49, roll: -0.02 });
 const S2b = (): ShotCam => ({ pos: [-2.4, 1.02, -2.9], look: [-0.05, 1.12, -0.15], fov: 44, roll: -0.015 });
-const S2c = (): ShotCam => ({ pos: [-1.8, 1.0, -2.4], look: [2.4, 1.52, -4.65], fov: 34, roll: 0.035 });
-const S2d = (): ShotCam => ({ pos: [-1.65, 1.0, -2.35], look: [2.4, 1.55, -4.65], fov: 33, roll: 0.025 });
+const S2c = (): ShotCam => ({ pos: [-1.8, 1.0, -2.4], look: [2.4, 1.53, -4.65], fov: 35, roll: 0.035 });
+const S2d = (): ShotCam => ({ pos: [-1.65, 1.0, -2.35], look: [2.4, 1.54, -4.65], fov: 35, roll: 0.025 });
 // S03: lateral glide over the wheat tips toward the windmill, shed and the waiting pair.
 const S3a = (): ShotCam => ({ pos: [14.5, 2.15, 10.0], look: [-3.2, 2.05, -2.2], fov: 40, roll: -0.02 });
 const S3b = (): ShotCam => ({ pos: [5.0, 2.35, 9.4], look: [-2.8, 1.95, -1.8], fov: 39, roll: 0.012 });
@@ -84,7 +84,7 @@ const CAMS: Record<number, Key[]> = {
   2: [
     { f: 82, s: S2a },
     { f: 110, dur: 13, s: S2b },
-    { f: 123, dur: 6, s: S2c },
+    { f: 123, dur: 3, s: S2c },
     { f: 130, dur: 10, s: S2d },
   ],
   3: [
@@ -98,8 +98,8 @@ export const camAt = (id: number, f: number): Cam => run(CAMS[id] ?? CAMS[3], f)
 // ---------------- lens ----------------
 export type Dof = { f: number; dur?: number; cInf: number; focus?: () => V3 };
 const crew = (): V3 => [-0.35, 1.12, 0.55];
-const heroEmuEyes = (): V3 => [2.4, 1.55, -4.65];
-const farmPair = (): V3 => [-1.3, 1.15, 0.0];
+const heroEmuEyes = (): V3 => [2.4, 1.62, -4.65];
+const farmPair = (): V3 => [-0.4, 1.15, 0.4];
 
 export const DOF: Dof[] = [
   { f: 0, cInf: 0 }, // establishing: keep the toy map readable

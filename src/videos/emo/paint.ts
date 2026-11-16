@@ -26,26 +26,50 @@ const mixHex = (a: string, b: string, t: number) => {
   return `#${c(16)}${c(8)}${c(0)}`;
 };
 
-/** red Pilbara dirt: base wash, dry patches, pebbles, hairline cracks. Tileable enough at 12 m repeats. */
+/** red Pilbara dirt: muted terracotta base, broad tonal washes, dry patches, pebbles, hairline cracks. */
 export const dirtTex = () => ctex("dirt", 512, 512, (g) => {
-  g.fillStyle = "#b4552d"; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = "#a06a55"; g.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 2600; i++) {
     const x = rnd(i, 1) * 512, y = rnd(i, 2) * 512, r = 1 + rnd(i, 3) * 7;
-    g.fillStyle = mixHex("#b4552d", rnd(i, 4) > 0.5 ? "#d18752" : "#7d3418", 0.18 + 0.5 * rnd(i, 5));
+    g.fillStyle = mixHex("#a06a55", rnd(i, 4) > 0.5 ? "#c39479" : "#76513f", 0.14 + 0.42 * rnd(i, 5));
     g.beginPath(); g.ellipse(x, y, r, r * (0.5 + 0.8 * rnd(i, 6)), rnd(i, 7) * 3, 0, Math.PI * 2); g.fill();
+  }
+  // broad low-contrast washes so the ground has tonal shape instead of one flat orange
+  for (let i = 0; i < 18; i++) {
+    const x = rnd(i, 31) * 512, y = rnd(i, 32) * 512, r = 70 + rnd(i, 33) * 170;
+    const warm = i % 3 !== 0;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, warm ? "rgba(220,196,166,.10)" : "rgba(70,48,40,.10)");
+    gr.addColorStop(0.6, warm ? "rgba(220,196,166,.05)" : "rgba(70,48,40,.05)");
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  // very soft diagonal bands break up the tiling without a hard edge
+  for (let i = 0; i < 5; i++) {
+    const y = rnd(i, 41) * 512;
+    const gr = g.createLinearGradient(0, y, 512, y + 190);
+    gr.addColorStop(0, "rgba(80,55,44,0)");
+    gr.addColorStop(0.5, i % 2 ? "rgba(80,55,44,.06)" : "rgba(222,196,164,.06)");
+    gr.addColorStop(1, "rgba(80,55,44,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
   }
   for (let i = 0; i < 42; i++) {
     const x = rnd(i, 11) * 512, y = rnd(i, 12) * 512, r = 18 + rnd(i, 13) * 70;
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, "rgba(226,160,100,.18)"); gr.addColorStop(1, "rgba(226,160,100,0)");
+    gr.addColorStop(0, "rgba(214,172,140,.11)"); gr.addColorStop(1, "rgba(214,172,140,0)");
     g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
   }
-  g.strokeStyle = "rgba(86,36,18,.42)"; g.lineWidth = 1.1;
+  g.strokeStyle = "rgba(78,48,38,.34)"; g.lineWidth = 1.1;
   for (let i = 0; i < 26; i++) {
     let x = rnd(i, 21) * 512, y = rnd(i, 22) * 512;
     g.beginPath(); g.moveTo(x, y);
     for (let k = 0; k < 5; k++) { x += (rnd(i * 9 + k, 23) - 0.5) * 42; y += (rnd(i * 9 + k, 24) - 0.5) * 42; g.lineTo(x, y); }
     g.stroke();
+  }
+  // a few cool grit flecks keep the terracotta from reading as pure orange
+  for (let i = 0; i < 160; i++) {
+    g.fillStyle = "rgba(148,140,132,.10)";
+    g.fillRect(rnd(i, 51) * 512, rnd(i, 52) * 512, 1.4, 1.4);
   }
 });
 

@@ -102,7 +102,7 @@ export class EmuWorld {
     const groundM = lam({ map: dirt, color: "#ffffff" });
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), groundM);
     ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; R.add(ground);
-    const moundM = lam({ color: "#a9603b" });
+    const moundM = lam({ color: "#986b56" });
     for (const [x, z, rx, ry, rz] of [
       [-58, -34, 28, 3.4, 16], [44, -52, 34, 4.2, 21], [66, 22, 26, 2.8, 14],
       [-46, 38, 23, 2.4, 13], [10, -74, 40, 4.6, 24],
@@ -151,6 +151,13 @@ export class EmuWorld {
       if (s02 < 2.6) continue;                                     // S02 lens path
       if (s02 < 3.5 && hash(i, 10) < 0.5) continue;                // feathered edge
       if (segDist(x, z, 14.5, 10.0, 5.0, 9.4) < 2.7) continue;     // S03 lens path
+      // open a clean sightline through the foreground wheat band to the S03 pair
+      const s3view = Math.min(
+        segDist(x, z, 14.5, 10.0, -1.8, 0.2),
+        segDist(x, z, 5.0, 9.4, -1.8, 0.2),
+      );
+      if (s3view < 1.7) continue;
+      if (s3view < 2.8 && hash(i, 12) < 0.45) continue;
       const s = 0.92 + 0.52 * Math.abs(Math.sin(i * 3.17 + 0.4));
       qt.setFromAxisAngle(V(0, 1, 0), i * 2.399);
       wheat.setMatrixAt(n, m.compose(pos.set(x, 0, z), qt, scl.set(s, s * (0.94 + 0.2 * Math.abs(Math.sin(i * 1.7))), s)));
@@ -422,7 +429,8 @@ export class EmuWorld {
     }
     if (id === 3) {
       places.push(placeSoldier(camInfo, { x: 0.5, z: 0.8, dx: -1.0, dz: -0.35, expr: "stern", mode: "stand", seed: 9, scale: 0.92 }));
-      places.push(placeEmu(camInfo, { x: -3.5, z: -1.0, scale: 1.0, blink: blinkAt(f, 7), bob: 0.7 * Math.sin((f - 140) * 0.05), look: 0.3 }));
+      places.push(placeSoldier(camInfo, { x: 1.9, z: 0.2, dx: 0.6, dz: 0.8, expr: "neutral", mode: "stand", seed: 5, blink: blinkAt(f, 5), scale: 0.86 }));
+      places.push(placeEmu(camInfo, { x: -1.8, z: 0.2, scale: 1.15, blink: blinkAt(f, 7), bob: 0.6 * Math.sin((f - 140) * 0.05), look: 0.25 }));
     }
 
     this.frustum.setFromProjectionMatrix(this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
