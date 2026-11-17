@@ -32,11 +32,11 @@ jobs:
       - name: Composition info
         run: npx remotion compositions src/emo-index.ts
 
-      - name: Render 4 stills at 540x960
+      - name: Render 9 stills at 540x960
         run: |
           set -e
           mkdir -p out
-          for f in 12 110 126 170; do
+          for f in 230 305 380 430 485 510 560 640 660; do
             start=$(date +%s)
             npx remotion still src/emo-index.ts EmuShort "out/emo-f${f}-540.png" \
               --frame=$f --scale=0.5 --gl=swangle --timeout=600000 --log=info

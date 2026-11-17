@@ -393,6 +393,20 @@ const hatOn = (p: Pen, o: Outfit, hp: P2[], H: Blob, cx: number, hc: number, lig
     const bx = hx + (side ? 8 * u : 0);
     p.ell(bx, yb + 3 * u, 1.26 * H.a, 0.1 * H.b, "#6f7266", ow, 0, 360, deg);
     p.stroke([[bx - H.a * 1.24, yb + 4 * u], [bx + H.a * 1.24, yb + 4 * u]], 1.4 * u, "#3f4239");
+  } else if (o.hat === "slouch") {
+    const yb = crown + 0.18 * HH, deg = (a * 180) / Math.PI;
+    const [bx, by] = R([[cx, yb + 2 * u]])[0];
+    p.ell(bx, by, 1.30 * H.a, 0.18 * H.b, "#8b7a52", ow, 0, 360, deg);
+    p.ell(bx, by - 2 * u, 1.03 * H.a, 0.15 * H.b, "#a38e60", ow * 0.7, 0, 360, deg);
+    const dome: P2[] = [];
+    for (let i = 0; i <= 18; i++) {
+      const t = Math.PI + (Math.PI * i) / 18;
+      dome.push([bx + 0.86 * H.a * Math.cos(t), by - 2 * u + 0.72 * H.b * Math.sin(t)]);
+    }
+    dome.push([bx + 0.86 * H.a, by + 1 * u], [bx - 0.86 * H.a, by + 1 * u]);
+    p.shadedFill(dome, "#8b7a52", mul("#8b7a52", SH_FELT), light, H.a, 0.4);
+    p.poly(dome, null, ow * 0.9);
+    p.band(R([[bx - 0.86 * H.a, by - 0.13 * H.b], [bx + 0.86 * H.a, by - 0.13 * H.b]]), "#5b4f38", 0.09 * H.b, 1.2 * u);
   } else if (o.hat === "cap" || o.hat === "hair") {
     const cut = crown + (o.hat === "cap" ? 0.3 : 0.42) * HH;
     const keep = (x: number, y: number) => y < cut || (side && o.hat === "hair" && x < cx - 6 * u && y < hc + 0.42 * H.b);
@@ -440,7 +454,7 @@ const hatOn = (p: Pen, o: Outfit, hp: P2[], H: Blob, cx: number, hc: number, lig
 // ---------------- bodies ----------------
 export type Arms = [P2[], P2[]];
 /** held prop; for the hammer the number is the strike 0 (raised) .. 1 (struck) */
-export type Prop = null | "icecream" | "shako" | ["hammer", number];
+export type Prop = null | "icecream" | "shako" | "clipboard" | ["hammer", number];
 
 const BUILD: Record<Build, { a: number; torso: number; legs: number; tw: number }> = {
   adult: { a: 118, torso: 1.1, legs: 1.4, tw: 0.8 },
@@ -451,6 +465,8 @@ const BUILD: Record<Build, { a: number; torso: number; legs: number; tw: number 
 export type FrontOpts = {
   phase?: number; expr?: Expr; mode?: "march" | "stroll" | "stand" | "sit" | "fall"; look?: number; blink?: boolean | number; lift?: number;
   prop?: Prop; tilt?: number; headTilt?: number; wave?: number;
+  /** both arms raised and flapping (0 = down, 1 = up) */
+  flap?: number;
   /** canvas angle the key light comes FROM (painted crescent + thick outline side) */
   light?: number; facing?: -1 | 0 | 1; seed?: number;
 };
@@ -461,7 +477,7 @@ const footStroke = (p: Pen, a: P2, b: P2, w: number, col: string) => {
 };
 
 export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
-  const { phase = 0, expr = "neutral", mode = "march", look = 0, blink = false, lift = 60, prop = null, tilt = 0, headTilt = 0, wave,
+  const { phase = 0, expr = "neutral", mode = "march", look = 0, blink = false, lift = 60, prop = null, tilt = 0, headTilt = 0, wave, flap,
     light = DEF_LIGHT, facing = 0, seed = 1 } = opts;
   const Bd = BUILD[o.build ?? "adult"], skin = o.skin ?? SKIN, two = Math.PI * 2, lid = lidOf(blink);
   const H = headBlob(seed, Bd.a, facing), W = 2 * H.a, HH = 2 * H.b, u = W / 100;
@@ -529,13 +545,23 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
   if (mode === "sit") for (const side of [-1, 1]) arms.push({ pts: [sh(side), [tcx + side * (1.1 * T.a + 6 * u), sh(side)[1] + 0.4 * HH], [tcx + side * (1.2 * T.a + 10 * u), torsoBot + 0.04 * HH]], front: false });
   else if (mode === "fall") for (const side of [-1, 1]) arms.push({ pts: [sh(side), [tcx + side * (1.15 * T.a + 12 * u), sh(side)[1] - 0.25 * HH], [tcx + side * (1.3 * T.a + 24 * u), sh(side)[1] - 0.68 * HH]], front: false });
   else {
-    arms.push({ pts: prop === "shako" ? hang(-1, 0) : hang(-1, -sw), front: false });
+    const raise = flap !== undefined ? clamp(flap, 0, 1) : 0;
+    const flapArm = (side: number): Arm => {
+      const S = sh(side);
+      return { pts: [S, [tcx + side * (1.08 * T.a + 8 * u), S[1] - 0.12 * HH * raise], [tcx + side * (1.30 * T.a + 22 * u), S[1] - 0.54 * HH * raise]], front: false };
+    };
+    arms.push(flap !== undefined ? flapArm(-1) : { pts: prop === "shako" ? hang(-1, 0) : hang(-1, -sw), front: false });
     if (rifle) {
       const G = lerp2(R0, R1, 0.1);
       arms.push({ pts: [sh(1), [tcx + 1.12 * T.a + 5 * u, sh(1)[1] + 0.45 * HH], G], front: false });
+    } else if (flap !== undefined) {
+      arms.push(flapArm(1));
     } else if (wave !== undefined) {
       const S = sh(1);
       arms.push({ pts: [S, [tcx + 1.1 * T.a + 10 * u + 3 * u * wave, S[1] - 0.22 * HH], [tcx + 1.18 * T.a + 16 * u + 12 * u * wave, S[1] - 0.6 * HH]], front: false });
+    } else if (prop === "clipboard") {
+      const S = sh(-1);
+      arms.push({ pts: [S, [tcx - 0.92 * T.a + 2 * u, S[1] + 0.42 * HH], [tcx - 0.62 * T.a + 2 * u, torsoBot - 0.06 * HH]], front: true });
     } else if (prop === "icecream") {
       const S = sh(1);
       arms.push({ pts: [S, [tcx + 1.05 * T.a + 4 * u, S[1] + 0.45 * HH], [tcx + 0.5 * T.a, S[1] + 0.4 * HH]], front: true });
@@ -599,6 +625,12 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
       p.band(Rh([[hx, hy + 12 * u], [hx, hy - 44 * u]]), "#8a5a34", 5 * u, 1.5 * u, "round");
       p.poly(Rh([[hx - 12 * u, hy - 58 * u], [hx + 20 * u, hy - 58 * u], [hx + 20 * u, hy - 42 * u], [hx - 12 * u, hy - 42 * u]]), "#7d848c", 2.2 * u);
       p.dot(hx, hy, 5.5 * u);
+    } else if (prop === "clipboard") {
+      const ang = rad(-18), Rh = (pts: P2[]) => rotPts(pts, ang, hx, hy);
+      p.poly(Rh([[hx - 25 * u, hy - 38 * u], [hx + 23 * u, hy - 38 * u], [hx + 23 * u, hy + 18 * u], [hx - 25 * u, hy + 18 * u]]), "#8a6038", 2.4 * u);
+      p.poly(Rh([[hx - 19 * u, hy - 29 * u], [hx + 17 * u, hy - 29 * u], [hx + 17 * u, hy + 10 * u], [hx - 19 * u, hy + 10 * u]]), "#f1e5c8", 1.2 * u);
+      p.band(Rh([[hx - 8 * u, hy - 40 * u], [hx + 8 * u, hy - 40 * u]]), "#4d4a43", 4 * u, 1.4 * u, "round");
+      p.dot(hx, hy, 5.5 * u);
     }
   }
   if (prop === "shako") { // carried by the left hand
@@ -622,6 +654,8 @@ export const bodyFront = (p: Pen, o: Outfit, opts: FrontOpts) => {
 
 export type SideOpts = {
   phase?: number; expr?: Expr; mode?: "march" | "stand" | "swing" | "push"; blink?: boolean | number; stomp?: number; pose?: number;
+  /** both arms raised and flapping (0 = down, 1 = up) */
+  flap?: number;
   /** step length as a multiple of 0.8 m (370 units): matches 1.6 m/s at 2 steps/s; scale by the view's foreshortening */
   stride?: number; light?: number; seed?: number;
   /** push mode: where the hands land at pose 1, in final canvas units (e.g. the swing kid's back) */
@@ -641,7 +675,7 @@ const SWING_HIP = 733;
 /** side view facing screen-right; march footfalls land at phase 0 (near foot) and 0.5 (far foot), like the front view.
  *  The stance foot is planted: it slides back at exactly the walking speed while the hip rises and falls over it. */
 export const bodySide = (p: Pen, o: Outfit, opts: SideOpts) => {
-  const { phase = 0, expr = "neutral", mode = "march", blink = false, stomp = 1, pose = 0, stride = 1, light = DEF_LIGHT, seed = 1 } = opts;
+  const { phase = 0, expr = "neutral", mode = "march", blink = false, stomp = 1, pose = 0, flap, stride = 1, light = DEF_LIGHT, seed = 1 } = opts;
   const Bd = BUILD[o.build ?? "adult"], skin = o.skin ?? SKIN, two = Math.PI * 2, lid = lidOf(blink);
   const H: Blob = { ...headBlob(seed, Bd.a, 1), asym: 0.12, rot: rad(3 + 3 * (rnd(seed, 7) - 0.5)) };
   const W = 2 * H.a, HH = 2 * H.b, u = W / 100, sole = 975, ankY = sole - 4 * u;
@@ -718,6 +752,11 @@ export const bodySide = (p: Pen, o: Outfit, opts: SideOpts) => {
     far = [S, [(S[0] + hN[0]) / 2 - 4 * u, (S[1] + hN[1]) / 2 - 0.02 * HH], [hN[0] - 6 * u, hN[1] - 0.08 * HH]];
   } else if (rifle) { near = [S, [S[0] - 4 * u, S[1] + 0.42 * HH], B0]; far = mode === "march" ? swingArm(rad(30) * nearFwd) : swingArm(0); }
   else { near = swingArm(rad(-30) * nearFwd); far = mode === "march" ? swingArm(rad(30) * nearFwd) : null; }
+  if (flap !== undefined) {
+    const k = clamp(flap, 0, 1);
+    near = [S, [S[0] + 0.26 * aLen, S[1] - 0.20 * HH * k], [S[0] + 0.58 * aLen, S[1] - 0.54 * HH * k]];
+    far = [S, [S[0] - 0.14 * aLen, S[1] - 0.18 * HH * k], [S[0] - 0.34 * aLen, S[1] - 0.50 * HH * k]];
+  }
   if (far) { p.stroke(curve(far[0], far[1], far[2]), 5.2 * u, farArm); p.dot(far[2][0], far[2][1], 5.5 * u); }
   p.gradFill(tp, o.jacket, mul(o.jacket, SH_CLOTH), light);
   p.clip(tp, () => {

@@ -1,6 +1,6 @@
-// "Ten Bullets a Bird" — Emu War 1932. Composition shell for the three built shots.
+// "Ten Bullets a Bird" — Emu War 1932. Composition shell for the ten built shots.
 // Same post chain as the bridge template: InkPass (world lines) -> thin-lens DOF -> Neutral tone map -> colour grade.
-// S01–S03 live in world.ts; frames PENDING_FROM..TOTAL hold a pre-production slate until the rest of the shots exist.
+// S01–S10 live in world.ts; frames PENDING_FROM..TOTAL hold a pre-production slate until the rest of the shots exist.
 import React, { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { AbsoluteFill, getInputProps, useCurrentFrame } from "remotion";

@@ -85,14 +85,18 @@ export const GUNNER: Outfit = {
   skin: "#ffe2c2", build: "adult", rifle: false,
 };
 export const gunner = (v = 0): Outfit => ({ ...GUNNER, skin: [ "#ffe2c2", "#f5c9a0", "#ecd0b6", "#c99067" ][v % 4], moustache: v % 3 === 1 ? "#4a3426" : undefined });
+export const MAJOR: Outfit = {
+  ...GUNNER, jacket: "#7d6d43", pants: "#5b5136", boots: "#2f2620", hat: "slouch", belt: "#4b3b26",
+  buttons: "#c9b98a", moustache: "#4a3426", skin: "#f5c9a0", build: "adult", rifle: false,
+};
 
 const LIGHT = -120 * Math.PI / 180; // painted key light: upper-left, same as the bridge cast
 
 export const placeSoldier = (
   cam: CamInfo,
-  p: { x: number; y?: number; z: number; dx: number; dz: number; phase?: number; expr?: Expr; mode?: "march" | "stroll" | "stand"; blink?: boolean | number; seed?: number; scale?: number },
+  p: { x: number; y?: number; z: number; dx: number; dz: number; phase?: number; expr?: Expr; mode?: "march" | "stroll" | "stand"; blink?: boolean | number; seed?: number; scale?: number; flap?: number },
 ): Place => {
-  const { x, z, dx, dz, phase = 0, expr = "neutral", mode = "stand", blink = false, seed = 1, scale = 0.86 } = p;
+  const { x, z, dx, dz, phase = 0, expr = "neutral", mode = "stand", blink = false, seed = 1, scale = 0.86, flap } = p;
   const y = p.y ?? 0;
   const tx = cam.pos.x - x, tz = cam.pos.z - z, tl = Math.hypot(tx, tz) || 1;
   const c = (tx * dx + tz * dz) / tl;
@@ -100,12 +104,33 @@ export const placeSoldier = (
   const d = cam.pos.distanceTo(new THREE.Vector3(x, y + 1.2, z)) / scale;
   const [w, h, k] = tier(d);
   const o = gunner(seed), mirror2 = side && mirror;
-  const fo: FrontOpts = { phase, expr, mode: mode === "stand" ? "stand" : mode, look: 0, blink, light: LIGHT, facing: 0, seed };
-  const so: SideOpts = { phase, expr, mode: mode === "stand" ? "stand" : "march", blink, light: LIGHT, seed, stride: 0.62 };
+  const fo: FrontOpts = { phase, expr, mode: mode === "stand" ? "stand" : mode, look: 0, blink, light: LIGHT, facing: 0, seed, flap };
+  const so: SideOpts = { phase, expr, mode: mode === "stand" ? "stand" : "march", blink, light: LIGHT, seed, stride: 0.62, flap };
   return {
     key: side ? `S|${seed}|${fkey(so)}` : `F|${seed}|${fkey(fo)}`,
     draw: (pen) => (side ? bodySide(pen, o, so) : bodyFront(pen, o, fo)),
     x, y: y + 0.005, z, scale, mirror: mirror2, size: [w, h, k],
+  };
+};
+
+export const placeMajor = (
+  cam: CamInfo,
+  p: { x: number; y?: number; z: number; dx: number; dz: number; phase?: number; expr?: Expr; mode?: "march" | "stroll" | "stand"; blink?: boolean | number; seed?: number; scale?: number },
+): Place => {
+  const { x, z, dx, dz, phase = 0, expr = "stern", mode = "stand", blink = false, seed = 12, scale = 1.08 } = p;
+  const y = p.y ?? 0;
+  const tx = cam.pos.x - x, tz = cam.pos.z - z, tl = Math.hypot(tx, tz) || 1;
+  const c = (tx * dx + tz * dz) / tl;
+  const side = c < 0.57, mirror = dx * cam.right.x + dz * cam.right.z < 0;
+  const d = cam.pos.distanceTo(new THREE.Vector3(x, y + 1.35, z)) / scale;
+  const [w, h, k] = tier(d);
+  const o: Outfit = { ...MAJOR };
+  const fo: FrontOpts = { phase, expr, mode: mode === "stand" ? "stand" : mode, look: 0, blink, light: LIGHT, facing: 0, seed, prop: "clipboard" };
+  const so: SideOpts = { phase, expr, mode: mode === "stand" ? "stand" : "march", blink, light: LIGHT, seed, stride: 0.62 };
+  return {
+    key: side ? `MS|${seed}|${fkey(so)}` : `MF|${seed}|${fkey(fo)}`,
+    draw: (pen) => (side ? bodySide(pen, o, so) : bodyFront(pen, o, fo)),
+    x, y: y + 0.005, z, scale, mirror: side && mirror, size: [w, h, k],
   };
 };
 
@@ -119,10 +144,50 @@ const ell = (cx: number, cy: number, rx: number, ry: number, rot = 0, n = 56): [
   return out;
 };
 
-export type EmuOpts = { blink?: number; bob?: number; look?: number; lean?: number; stride?: number; phase?: number; scale?: number };
+export type EmuOpts = { blink?: number; bob?: number; look?: number; lean?: number; stride?: number; phase?: number; scale?: number; down?: number };
 /** hero emu in the 600 x 1000 design space (soles at y=975): round body, long S-neck, tiny head, huge half-lidded eyes. */
+const drawEmuDown = (p: Pen, o: EmuOpts = {}) => {
+  const { look = 0 } = o;
+  // tail feathers fanned on the ground, left
+  for (const [tx, ty, wdt] of [[92, 782, 13], [80, 812, 15], [86, 844, 14], [100, 868, 11]] as const) {
+    p.line([[196, 810], [150, 806], [tx, ty]], "#6a5849", wdt, true);
+    p.dot(tx, ty, wdt * 0.9, "#5b4a3d");
+  }
+  // legs sticking up, cartoon flop
+  for (const [side, kx, fx, fy] of [[-1, 218, 186, 600], [1, 262, 286, 574]] as const) {
+    p.line([[282 + side * 14, 770], [kx, 690], [fx, fy]], "#8a7762", 17, true);
+    p.line([[kx, 690], [fx, fy]], "#6f5e4d", 10, false);
+    p.line([[fx, fy], [fx - 28, fy - 20]], "#5b4a3d", 9, true);
+    p.line([[fx, fy], [fx + 26, fy - 24]], "#5b4a3d", 9, true);
+    p.dot(kx, 690, 6.5, "#4a3c31");
+  }
+  // body and wing lying on its side
+  const body = ell(322, 800, 172, 92, -0.06);
+  p.shadedFill(body, "#8b7864", "#57483c", LIGHT, 172, 0.42);
+  p.inkRing(body, 13, thickAngle(LIGHT));
+  const wing = ell(300, 788, 102, 55, 0.14);
+  p.shadedFill(wing, "#786453", "#4e4036", LIGHT, 100, 0.45);
+  p.inkRing(wing, 8, thickAngle(LIGHT));
+  // neck + head resting forward
+  p.line([[430, 806], [488, 760], [516, 700]], "#8b7864", 39, true);
+  p.line([[438, 790], [488, 748], [512, 702]], "#a08a72", 17, false);
+  const head = ell(526 + look * 6, 676, 58, 48, -0.08);
+  p.shadedFill(head, "#8b7864", "#57483c", LIGHT, 58, 0.4);
+  p.inkRing(head, 10, thickAngle(LIGHT));
+  for (const [x0, y0, x1, y1] of [[514, 638, 500, 604], [524, 634, 522, 598], [535, 636, 546, 606]] as const) {
+    p.stroke([[x0, y0], [x1, y1]], 7, "#4a3c31");
+    p.dot(x1, y1, 5, "#3d3128");
+  }
+  p.poly([[570 + look * 6, 670], [644 + look * 6, 682], [572 + look * 6, 694]], "#3a2c2c", 7);
+  p.stroke([[568 + look * 6, 684], [640 + look * 6, 690]], 3, "#1f1818");
+  for (const ex of [514, 538]) {
+    p.stroke([[ex - 10, 672], [ex + 10, 672]], 3.4, "#3d3128");
+  }
+  p.stroke([[500, 690], [552, 690]], 3, "#57483c");
+};
 export const drawEmu = (p: Pen, o: EmuOpts = {}) => {
-  const { blink = 0, bob = 0, look = 0, lean = 0, stride = 1, phase = 0 } = o;
+  const { blink = 0, bob = 0, look = 0, lean = 0, stride = 0, phase = 0, down = 0 } = o;
+  if (down > 0.5) { drawEmuDown(p, o); return; }
   const hx = 392 + lean * 12, hy = 214 + bob;
   // ---- tail (behind the body) ----
   for (const [tx, ty, wdt] of [[86, 452, 13], [78, 486, 15], [86, 520, 14], [102, 548, 11]] as const) {
@@ -131,16 +196,17 @@ export const drawEmu = (p: Pen, o: EmuOpts = {}) => {
   }
   // ---- legs ----
   for (const [side, kx, ax] of [[-1, 268, 278], [1, 332, 322]] as const) {
+    const gait = stride > 0 ? Math.sin(Math.PI * 2 * phase + (side > 0 ? Math.PI : 0)) * stride : 0;
     const hip: [number, number] = [300 + side * 18, 716];
-    const knee: [number, number] = [kx, 838];
-    const ankle: [number, number] = [ax, 950];
+    const knee: [number, number] = [kx + gait * 12, 838 - Math.max(0, gait) * 10];
+    const ankle: [number, number] = [ax + gait * 30, 950 - Math.max(0, gait) * 18];
     p.line([hip, knee, ankle], "#8a7762", 17, true);
     p.line([knee, ankle], "#6f5e4d", 10, false);
     // three-toed foot
-    p.line([ankle, [ax - 30, 970]], "#5b4a3d", 9, true);
-    p.line([ankle, [ax + 2, 977]], "#5b4a3d", 9, true);
-    p.line([ankle, [ax + 32, 968]], "#5b4a3d", 9, true);
-    p.dot(kx, 838, 6.5, "#4a3c31");
+    p.line([ankle, [ankle[0] - 30, ankle[1] + 20]], "#5b4a3d", 9, true);
+    p.line([ankle, [ankle[0] + 2, ankle[1] + 27]], "#5b4a3d", 9, true);
+    p.line([ankle, [ankle[0] + 32, ankle[1] + 18]], "#5b4a3d", 9, true);
+    p.dot(knee[0], knee[1], 6.5, "#4a3c31");
   }
   // ---- body ----
   const body = ell(300, 566, 150, 174, -0.06);
@@ -190,16 +256,16 @@ export const drawEmu = (p: Pen, o: EmuOpts = {}) => {
   void stride; void phase; // walk cycle arrives with S04 (flock); the hero stands here
 };
 
-export const placeEmu = (cam: CamInfo, p: { x: number; y?: number; z: number; scale?: number; blink?: number; bob?: number; look?: number }): Place => {
-  const { x, z, scale = 0.95, blink = 0, bob = 0, look = 0 } = p;
+export const placeEmu = (cam: CamInfo, p: { x: number; y?: number; z: number; scale?: number; blink?: number; bob?: number; look?: number; stride?: number; phase?: number; lean?: number; down?: number; mirror?: boolean }): Place => {
+  const { x, z, scale = 0.95, blink = 0, bob = 0, look = 0, stride = 0, phase = 0, lean = 0, down = 0, mirror = false } = p;
   const y = p.y ?? 0;
   const d = cam.pos.distanceTo(new THREE.Vector3(x, y + 1.1, z)) / scale;
   const [w, h, k] = tier(d);
-  const opts: EmuOpts = { blink, bob: q(bob, 60), look: q(look, 60) };
+  const opts: EmuOpts = { blink: q(blink, 60), bob: q(bob, 60), look: q(look, 60), stride: q(stride, 60), phase: q(phase, 60), lean: q(lean, 60), down: q(down, 60) };
   return {
     key: `EMU|${fkey(opts)}`,
     draw: (pen) => drawEmu(pen, opts),
-    x, y: y + 0.005, z, scale, size: [w, h, k],
+    x, y: y + 0.005, z, scale, mirror, size: [w, h, k],
   };
 };
 

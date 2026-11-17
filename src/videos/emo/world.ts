@@ -1,13 +1,13 @@
 // The Emu War farm as one three.js scene. Painted dirt, an instanced waving wheat field, windmill, corrugated shed,
 // fence, eucalypts, the S01 relief-map overlay, a Lewis gun on a tripod, a gun crew and the hero emu.
-// update(id, f, camera, scene) poses everything for the three built shots (S01–S03) and returns the look target.
+// update(id, f, camera, scene) poses everything for the ten built shots (S01–S10) and returns the look target.
 import * as THREE from "three";
 import { dirtTex, wheatTex, ironTex, gunTex, woodTex, mapTex, cloudTex, crateTex, dustTex } from "./paint";
 import { twoTone, TONE, CHAR, untone } from "./shade";
 import { LIGHTS, LOOK } from "./lights";
 import { NOINK } from "./ink";
-import { Pool, Actor, Place, CamInfo, placeSoldier, placeEmu, blinkAt } from "./cast";
-import { FPS, SHOTS, camAt, V3, smooth } from "./story";
+import { Pool, Actor, Place, CamInfo, placeSoldier, placeMajor, placeEmu, blinkAt } from "./cast";
+import { FPS, SHOTS, camAt, V3, smooth, clamp01 } from "./story";
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const lam = (opts: THREE.MeshLambertMaterialParameters) => twoTone(new THREE.MeshLambertMaterial(opts));
@@ -20,6 +20,8 @@ const beamBetween = (a: THREE.Vector3, b: THREE.Vector3, th: number) => {
 };
 
 const SKY = { c: ["#cfe3f2", "#b8d0ec", "#8cb7e8", "#5f9adf", "#3b7fd0"], e: [0, 3, 8, 16, 40] };
+
+const hash2 = (i: number, k: number) => { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
 
 /** distance from (px,pz) to the camera path a->b, for keeping wheat out of the lens */
 const segDist = (px: number, pz: number, ax: number, az: number, bx: number, bz: number) => {
@@ -57,10 +59,21 @@ export class EmuWorld {
   private map: THREE.Mesh;
   private mapMat: THREE.MeshBasicMaterial;
   private wheatMat: THREE.MeshLambertMaterial;
-  private wheatU = { uTime: { value: 0 } };
+  private wheatU = { uTime: { value: 0 }, uFlat: { value: 0 }, uFlatZ: { value: -30 }, uFlatW: { value: 4.5 } };
   private mill: THREE.Group;
   private clouds: THREE.Mesh[] = [];
   private dust: THREE.Sprite[] = [];
+  private road: THREE.Group;
+  private trucks: THREE.Group[] = [];
+  private roadPuffs: THREE.Sprite[] = [];
+  private camp: THREE.Group;
+  private gun2: THREE.Group;
+  private ammo: THREE.Group;
+  private trails: THREE.Sprite[] = [];
+  private flash: THREE.Group;
+  private tracers: THREE.Mesh[] = [];
+  private impacts: THREE.Sprite[] = [];
+  private targets: { x: number; z: number }[] = [];
   /** farm props that sit on the S01 map plate: hidden until the map dissolves */
   private props: THREE.Object3D[] = [];
   private sunCache = new Map<number, THREE.Vector3>();
@@ -122,11 +135,19 @@ export class EmuWorld {
     this.wheatMat = new THREE.MeshLambertMaterial({ map: wheatTex(), alphaTest: 0.5, side: THREE.DoubleSide, color: "#ffffff" });
     this.wheatMat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = this.wheatU.uTime;
+      sh.uniforms.uFlat = this.wheatU.uFlat;
+      sh.uniforms.uFlatZ = this.wheatU.uFlatZ;
+      sh.uniforms.uFlatW = this.wheatU.uFlatW;
       sh.vertexShader = sh.vertexShader
-        .replace("#include <common>", "#include <common>\nuniform float uTime;")
+        .replace("#include <common>", "#include <common>\nuniform float uTime; uniform float uFlat; uniform float uFlatZ; uniform float uFlatW;")
         .replace("#include <begin_vertex>", `#include <begin_vertex>
           float bend = clamp(position.y / 1.6, 0.0, 1.0);
           float ph = instanceMatrix[3].x * 0.55 + instanceMatrix[3].z * 0.38;
+          float flatBand = 1.0 - smoothstep(uFlatW * 0.25, uFlatW, abs(instanceMatrix[3].z - uFlatZ));
+          float fl = uFlat * flatBand;
+          transformed.y *= 1.0 - 0.74 * fl;
+          transformed.x += fl * 0.16 * bend;
+          transformed.z += fl * 0.10 * bend;
           transformed.x += sin(uTime * 1.35 + ph) * 0.17 * bend * bend;
           transformed.z += cos(uTime * 1.05 + ph * 1.31) * 0.10 * bend * bend;`);
     };
@@ -158,6 +179,10 @@ export class EmuWorld {
       );
       if (s3view < 1.7) continue;
       if (s3view < 2.8 && hash(i, 12) < 0.45) continue;
+      if (segDist(x, z, 10.4, 3.2, 7.6, 1.2) < 2.0) continue;  // S06 lens path
+      if (segDist(x, z, -2.4, 4.6, 3.2, 2.4) < 2.0) continue;  // S07 lens path
+      if (segDist(x, z, 5.6, 3.6, 4.8, 2.8) < 2.2) continue;   // S08 lens path
+      if (Math.hypot(x - 10, z + 7) < 5.6) continue;           // camp clearing
       const s = 0.92 + 0.52 * Math.abs(Math.sin(i * 3.17 + 0.4));
       qt.setFromAxisAngle(V(0, 1, 0), i * 2.399);
       wheat.setMatrixAt(n, m.compose(pos.set(x, 0, z), qt, scl.set(s, s * (0.94 + 0.2 * Math.abs(Math.sin(i * 1.7))), s)));
@@ -321,6 +346,116 @@ export class EmuWorld {
       }
     }
 
+    // ---- road, convoy, camp, guns, ammo, volley FX ----
+    const truckM = lam({ map: woodTex(), color: "#6f6246" });
+    const truckDark = lam({ color: "#39352c" });
+    const truckTarp = lam({ color: "#a89672" });
+    const canvasM = lam({ color: "#b9a888" });
+    const makeTruck = () => {
+      const g = new THREE.Group();
+      const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) => {
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
+        m.castShadow = true; m.receiveShadow = true; g.add(m);
+        return m;
+      };
+      add(new THREE.BoxGeometry(5.2, 0.22, 1.8), truckDark, 0, 0.55, 0);
+      add(new THREE.BoxGeometry(2.9, 0.42, 1.85), truckM, -1.0, 0.9, 0);
+      add(new THREE.BoxGeometry(2.9, 0.42, 0.08), truckM, -1.0, 1.22, 0.91);
+      add(new THREE.BoxGeometry(2.9, 0.42, 0.08), truckM, -1.0, 1.22, -0.91);
+      add(new THREE.BoxGeometry(1.5, 1.35, 1.72), truckM, 1.45, 1.35, 0);
+      add(new THREE.BoxGeometry(1.55, 0.14, 1.78), truckDark, 1.45, 2.08, 0);
+      add(new THREE.BoxGeometry(1.25, 0.9, 1.55), truckM, 2.65, 1.0, 0);
+      add(new THREE.BoxGeometry(0.08, 0.62, 1.3), truckDark, 1.43, 1.55, 0.87);
+      add(new THREE.BoxGeometry(0.08, 0.62, 1.3), truckDark, 1.43, 1.55, -0.87);
+      add(new THREE.BoxGeometry(0.1, 0.1, 1.35), truckDark, 3.3, 0.95, 0);
+      for (const x of [-1.7, 1.7]) for (const z of [-0.94, 0.94]) {
+        add(new THREE.CylinderGeometry(0.48, 0.48, 0.34, 14), truckDark, x, 0.52, z, Math.PI / 2, 0, 0);
+        add(new THREE.CylinderGeometry(0.24, 0.24, 0.36, 10), truckM, x, 0.52, z, Math.PI / 2, 0, 0);
+      }
+      add(new THREE.CylinderGeometry(0.13, 0.13, 0.1, 10), lam({ color: "#e4d7a8" }), 3.25, 1.12, 0.52, 0, 0, Math.PI / 2);
+      add(new THREE.CylinderGeometry(0.13, 0.13, 0.1, 10), lam({ color: "#e4d7a8" }), 3.25, 1.12, -0.52, 0, 0, Math.PI / 2);
+      add(new THREE.BoxGeometry(2.55, 0.1, 1.7), truckTarp, -1.0, 1.58, 0);
+      return g;
+    };
+
+    const roadTex = dirtTex(); roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping; roadTex.repeat.set(18, 2);
+    this.road = new THREE.Group(); this.road.visible = false;
+    const roadMesh = new THREE.Mesh(new THREE.PlaneGeometry(126, 5.4), lam({ map: roadTex, color: "#c19a76" }));
+    roadMesh.rotation.x = -Math.PI / 2; roadMesh.position.set(0, 0.025, -48); roadMesh.receiveShadow = true; this.road.add(roadMesh);
+    for (const z of [-1.12, 1.12]) {
+      const rut = new THREE.Mesh(new THREE.PlaneGeometry(126, 0.2), lam({ color: "#8a6248" }));
+      rut.rotation.x = -Math.PI / 2; rut.position.set(0, 0.036, -48 + z); this.road.add(rut);
+    }
+    for (let x = -54; x <= 54; x += 12) for (const z of [-45.8, -50.2]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.85, 0.12), lam({ map: woodTex(), color: "#a8865c" }));
+      post.position.set(x, 0.42, z); post.castShadow = true; this.road.add(post);
+    }
+    R.add(this.road);
+    for (let i = 0; i < 3; i++) {
+      const t = makeTruck();
+      t.position.set(-30 - i * 8.5, 0, -48); t.visible = false;
+      this.trucks.push(t); R.add(t);
+    }
+    const puffMat = new THREE.SpriteMaterial({ map: dustTex(), transparent: true, depthWrite: false, opacity: 0.34, color: "#d8a676" });
+    for (let i = 0; i < 18; i++) {
+      const s = new THREE.Sprite(puffMat.clone());
+      s.scale.set(2.6, 1.5, 1); s.layers.set(NOINK); s.visible = false;
+      this.roadPuffs.push(s); R.add(s);
+    }
+    for (let i = 0; i < 24; i++) {
+      const s = new THREE.Sprite(puffMat.clone());
+      s.scale.set(2.2, 1.2, 1); s.layers.set(NOINK); s.visible = false;
+      this.trails.push(s); R.add(s);
+    }
+
+    this.camp = new THREE.Group(); this.camp.visible = false;
+    const tent = new THREE.Mesh(new THREE.ConeGeometry(2.4, 2.5, 4), canvasM);
+    tent.position.set(7.4, 1.2, -6.8); tent.rotation.y = Math.PI / 4; tent.castShadow = true; tent.receiveShadow = true; this.camp.add(tent);
+    const tentPole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 2.9, 6), lam({ color: "#6d5638" }));
+    tentPole.position.set(7.4, 1.35, -6.8); this.camp.add(tentPole);
+    const tableTop = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.95), lam({ map: woodTex(), color: "#9a7a50" }));
+    tableTop.position.set(5.1, 0.8, -5.2); tableTop.castShadow = true; tableTop.receiveShadow = true; this.camp.add(tableTop);
+    for (const [x, z] of [[4.2, -5.55], [6.0, -5.55], [4.2, -4.85], [6.0, -4.85]] as const) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.8, 0.08), lam({ map: woodTex(), color: "#7b5f3c" }));
+      leg.position.set(x, 0.4, z); this.camp.add(leg);
+    }
+    const mapSheet = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 0.72), lam({ color: "#e7ddc2" }));
+    mapSheet.rotation.x = -Math.PI / 2; mapSheet.position.set(5.1, 0.85, -5.2); this.camp.add(mapSheet);
+    const step = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.42, 1.05), lam({ map: woodTex(), color: "#9a7a50" }));
+    step.position.set(3.1, 0.21, -3.0); step.castShadow = true; step.receiveShadow = true; this.camp.add(step);
+    for (const [x, z, n] of [[6.4, -4.7, 1], [6.4, -4.7, 2]] as const) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.5, 0.56), [wood, wood, wood, wood, crateM, crateM]);
+      c.position.set(x, 0.25 + (n - 1) * 0.51, z); c.rotation.y = 0.2; c.castShadow = true; c.receiveShadow = true; this.camp.add(c);
+    }
+    const campTruck = makeTruck(); campTruck.position.set(12.2, 0, -7.4); campTruck.rotation.y = -0.62; campTruck.scale.setScalar(0.92); this.camp.add(campTruck);
+    R.add(this.camp);
+
+    this.gun2 = gun.clone(true); this.gun2.position.set(4.3, 0, -0.65); this.gun2.rotation.y = -0.42; this.gun2.visible = false; R.add(this.gun2);
+    this.ammo = new THREE.Group(); this.ammo.position.set(2.6, 0, -2.5); this.ammo.visible = false;
+    for (const [x, y, z, ry] of [[-0.5, 0.25, 0, -0.16], [0.5, 0.25, 0.02, 0.22], [-0.46, 0.76, 0.01, 0.08], [0.42, 0.76, -0.02, -0.2], [0, 1.27, 0, 0.12]] as const) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.5, 0.58), [wood, wood, wood, wood, crateM, crateM]);
+      c.position.set(x, y, z); c.rotation.y = ry; c.castShadow = true; c.receiveShadow = true; this.ammo.add(c);
+    }
+    R.add(this.ammo);
+
+    this.flash = new THREE.Group(); this.flash.position.set(0, 1.1, -1.45); this.flash.visible = false;
+    const flashM = new THREE.MeshBasicMaterial({ color: "#ffd36e", transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false });
+    const flashBall = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), flashM); this.flash.add(flashBall);
+    const flashCone = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.9, 6), flashM);
+    flashCone.rotation.x = Math.PI / 2; flashCone.position.z = -0.42; this.flash.add(flashCone);
+    this.flash.traverse((o) => o.layers.set(NOINK)); R.add(this.flash);
+    const tracerM = new THREE.MeshBasicMaterial({ color: "#ffd89a", transparent: true, opacity: 0.74, depthWrite: false, toneMapped: false });
+    for (let i = 0; i < 12; i++) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 1, 6), tracerM.clone());
+      m.layers.set(NOINK); m.visible = false; this.tracers.push(m); R.add(m);
+    }
+    for (let i = 0; i < 12; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustTex(), transparent: true, depthWrite: false, opacity: 0.5, color: "#e8c18b" }));
+      s.scale.set(1.7, 1.0, 1); s.layers.set(NOINK); s.visible = false; this.impacts.push(s); R.add(s);
+    }
+    this.targets = Array.from({ length: 12 }, (_, i) => ({ x: -2.1 + (i % 4) * 1.4, z: -6.8 - Math.floor(i / 4) * 1.6 }));
+
     // ---- clouds + dust ----
     const cloudM = new THREE.MeshBasicMaterial({ map: cloudTex(), transparent: true, depthWrite: false, fog: false, opacity: 0.9 });
     for (let i = 0; i < 7; i++) {
@@ -399,6 +534,19 @@ export class EmuWorld {
     this.mapMat.opacity = mapK;
     // the farm props stand where the S01 map plate is, so they swap in as the plate dissolves
     for (const p of this.props) p.visible = mapK < 0.02;
+    this.wheatU.uFlat.value = 0;
+    this.wheatU.uFlatZ.value = -30;
+    this.wheatU.uFlatW.value = 4.5;
+    this.road.visible = false;
+    for (const tk of this.trucks) tk.visible = false;
+    for (const sp of this.roadPuffs) sp.visible = false;
+    this.camp.visible = false;
+    this.gun2.visible = false;
+    this.ammo.visible = false;
+    for (const sp of this.trails) sp.visible = false;
+    this.flash.visible = false;
+    for (const m of this.tracers) m.visible = false;
+    for (const sp of this.impacts) sp.visible = false;
 
     // ---- cast ----
     const places: Place[] = [];
@@ -431,6 +579,156 @@ export class EmuWorld {
       places.push(placeSoldier(camInfo, { x: 0.5, z: 0.8, dx: -1.0, dz: -0.35, expr: "stern", mode: "stand", seed: 9, scale: 0.92 }));
       places.push(placeSoldier(camInfo, { x: 1.9, z: 0.2, dx: 0.6, dz: 0.8, expr: "neutral", mode: "stand", seed: 5, blink: blinkAt(f, 5), scale: 0.86 }));
       places.push(placeEmu(camInfo, { x: -1.8, z: 0.2, scale: 1.15, blink: blinkAt(f, 7), bob: 0.6 * Math.sin((f - 140) * 0.05), look: 0.25 }));
+    }
+    if (id === 4) {
+      // the flock walks the flattening front down the field in loose rows
+      const k = smooth((f - 196) / 70);
+      const front = 10 - 33 * k;
+      this.wheatU.uFlat.value = 0.94 * smooth(k * 4);
+      this.wheatU.uFlatZ.value = front;
+      this.wheatU.uFlatW.value = 5.6;
+      for (let i = 0; i < 16; i++) {
+        const row = Math.floor(i / 4), col = i % 4;
+        const x = col * 1.9 + (hash2(i, 3) - 0.5) * 1.2;
+        const z = front + 3.2 - row * 3.6 + (hash2(i, 4) - 0.5) * 1.2;
+        places.push(placeEmu(camInfo, {
+          x, z, scale: 0.8 + 0.12 * hash2(i, 8),
+          stride: 0.55, phase: t * 2.2 + i * 0.37, lean: 0.22, look: 0.1,
+          blink: blinkAt(f, 30 + i),
+        }));
+      }
+      for (let i = 0; i < 8; i++) {
+        const sp = this.roadPuffs[i];
+        sp.visible = true;
+        sp.position.set(-0.6 + hash2(i, 5) * 7.5, 0.3 + 0.15 * (i % 2), front - 1.5 + hash2(i, 6) * 8.5);
+        sp.scale.set(1.7 + (i % 3) * 0.5, 0.95 + (i % 2) * 0.3, 1);
+        (sp.material as THREE.SpriteMaterial).opacity = 0.07 + 0.07 * Math.abs(Math.sin(f * 0.25 + i * 2.1));
+      }
+    }
+    if (id === 5) {
+      this.road.visible = true;
+      const p = clamp01((f - 272) / 68);
+      for (let i = 0; i < this.trucks.length; i++) {
+        const tk = this.trucks[i];
+        tk.visible = true;
+        tk.position.set(-12 + 26 * p + i * 8, 0.035 * Math.abs(Math.sin(f * 0.35 + i * 1.7)), -48);
+        tk.rotation.z = 0.014 * Math.sin(f * 0.5 + i);
+      }
+      for (let i = 0; i < this.roadPuffs.length; i++) {
+        const tk = this.trucks[i % 3], sp = this.roadPuffs[i];
+        sp.visible = true;
+        sp.position.set(tk.position.x - 2.4 - (i % 4) * 0.85, 0.32 + 0.22 * (i % 3), -48 + ((i % 3) - 1) * 0.55);
+        sp.scale.set(2.1 + (i % 4) * 0.55, 1.15 + (i % 3) * 0.35, 1);
+        (sp.material as THREE.SpriteMaterial).opacity = 0.16 + 0.16 * Math.abs(Math.sin(f * 0.22 + i * 1.9));
+      }
+      places.push(placeEmu(camInfo, {
+        x: 3 + 3 * p, z: -44.5, scale: 0.9, stride: 0.34, phase: t * 0.8,
+        lean: 0.12, look: 0.3, blink: blinkAt(f, 40),
+      }));
+    }
+    if (id === 6) {
+      this.camp.visible = true;
+      const walk = smooth((f - 340) / 28);
+      const stepDown = 0.42 * (1 - smooth((f - 340) / 15));
+      places.push(placeMajor(camInfo, {
+        x: 3.1 + 0.22 * walk, y: stepDown, z: -3.0 + 1.1 * walk,
+        dx: 0.45, dz: 1.0, mode: f < 344 ? "stand" : "stroll", phase: (f - 340) * 0.06, scale: 1.05,
+      }));
+      places.push(placeSoldier(camInfo, { x: 2.05, z: -3.95, dx: 0.8, dz: 0.9, expr: "stern", mode: "stand", seed: 15, scale: 0.84 }));
+      places.push(placeSoldier(camInfo, { x: 3.75, z: -4.05, dx: 0.5, dz: 1.1, expr: "neutral", mode: "stand", seed: 18, blink: blinkAt(f, 18), scale: 0.82 }));
+    }
+    if (id === 7) {
+      this.gun2.visible = true;
+      this.ammo.visible = true;
+    }
+    if (id === 8) {
+      if (f < 500) {
+        const adv = smooth((f - 464) / 34);
+        for (let i = 0; i < 2; i++) {
+          const flap = 0.5 + 0.45 * Math.sin((f - 464) * 0.42 + i * 1.9);
+          places.push(placeSoldier(camInfo, {
+            x: 1.2 + i * 1.15, z: -2.55 - i * 0.35 - adv * 0.95,
+            dx: 0, dz: -1, expr: "stern", mode: "march", seed: 21 + i,
+            phase: f * 0.11 + i * 0.5, scale: 0.86 - i * 0.03, flap: Math.max(0, flap),
+          }));
+        }
+      } else {
+        const forced = f >= 506 && f < 510 ? [0.5, 1, 1, 0.5][f - 506] : blinkAt(f, 11);
+        places.push(placeEmu(camInfo, {
+          x: 2.4, z: -4.65, scale: 1.0, blink: forced, look: 0.08,
+          bob: 0.06 * Math.sin((f - 500) * 0.06),
+        }));
+      }
+    }
+    if (id === 9) {
+      const p = clamp01((f - 524) / 83);
+      const dirs = [[1, -0.25], [0.25, -1], [-0.92, -0.35], [-0.55, 0.85], [0.9, 0.62]] as const;
+      const bases = [[7.5, -5.5], [-8.5, -3.2], [-2.5, -12.5], [4.2, -14.5], [8.5, 2.0]] as const;
+      for (let g = 0; g < 5; g++) {
+        const [bx, bz] = bases[g], [dx0, dz0] = dirs[g];
+        const len = Math.hypot(dx0, dz0) || 1, dx = dx0 / len, dz = dz0 / len;
+        const px = -dz, pz = dx;
+        for (let j = 0; j < 3; j++) {
+          const off = (j - 1) * 1.25 + (g % 2) * 0.4;
+          places.push(placeEmu(camInfo, {
+            x: bx + dx * p * 6.5 + px * off + (hash2(g * 3 + j, 1) - 0.5) * 0.7,
+            z: bz + dz * p * 6.5 + pz * off + (hash2(g * 3 + j, 2) - 0.5) * 0.7,
+            scale: 0.78 + 0.08 * hash2(g * 3 + j, 3),
+            stride: 0.72, phase: t * 2.8 + g * 0.5 + j * 0.33, lean: 0.18, look: 0.1,
+            blink: blinkAt(f, 60 + g * 3 + j),
+          }));
+        }
+      }
+      for (let i = 0; i < this.trails.length; i++) {
+        const g = i % 5, [dx0, dz0] = dirs[g];
+        const len = Math.hypot(dx0, dz0) || 1, dx = dx0 / len, dz = dz0 / len;
+        const px = -dz, pz = dx;
+        const row = Math.floor(i / 5);
+        const r = 2.4 + row * 2.5 + p * 4.5;
+        const sp = this.trails[i];
+        sp.visible = true;
+        sp.position.set(dx * r + px * ((row - 1) * 1.4), 0.42, -5 + dz * r + pz * ((row - 1) * 1.4));
+        sp.scale.set(2.4 + row * 0.5, 1.3 + row * 0.3, 1);
+        (sp.material as THREE.SpriteMaterial).opacity = 0.20 + 0.13 * (1 - p) * Math.abs(Math.sin(f * 0.2 + i));
+      }
+    }
+    if (id === 10) {
+      const muzzle = V(0, 1.1, -1.45);
+      const burst = f >= 607 && f < 646 && (f - 607) % 3 < 2;
+      this.flash.visible = burst;
+      if (burst) {
+        const k = 0.8 + 0.35 * Math.abs(Math.sin(f * 2.7));
+        this.flash.scale.set(k, k, k);
+        this.flash.rotation.z = f * 0.9;
+      }
+      for (let i = 0; i < 12; i++) {
+        const tg = this.targets[i];
+        const hit = 610 + i * 2.9;
+        const down = f >= hit ? 1 : 0;
+        places.push(placeEmu(camInfo, {
+          x: tg.x, z: tg.z, y: 0.01, scale: 0.78 + 0.05 * hash2(i, 2),
+          blink: blinkAt(f, 50 + i), bob: down ? 0 : 0.07 * Math.sin(f * 0.08 + i * 1.3),
+          look: 0.15, down, mirror: i % 2 === 1,
+        }));
+        const tr = this.tracers[i];
+        const travel = (f - (hit - 3)) / 3;
+        if (travel > 0 && travel < 1.15) {
+          const dir = V(tg.x - muzzle.x, 0.8 - muzzle.y, tg.z - muzzle.z);
+          const dist = dir.length(); dir.normalize();
+          tr.visible = true;
+          tr.position.copy(muzzle).addScaledVector(dir, dist * Math.min(1, travel));
+          tr.quaternion.setFromUnitVectors(V(0, 1, 0), dir);
+          tr.scale.set(1, 2.6, 1);
+        }
+        const imp = this.impacts[i], age = f - hit;
+        if (age >= 0 && age < 7) {
+          imp.visible = true;
+          imp.position.set(tg.x, 0.8, tg.z);
+          const a = age / 7;
+          imp.scale.setScalar(0.9 + a * 2.6);
+          (imp.material as THREE.SpriteMaterial).opacity = 0.62 * (1 - a);
+        }
+      }
     }
 
     this.frustum.setFromProjectionMatrix(this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
